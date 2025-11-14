@@ -7,7 +7,7 @@ def fetch_news(query="Shankara", max_results=20, region="IN"):
     """
     Fetch news from Google News RSS for a given query.
 
-    query: search term, e.g. 'Shankara'
+    query: search term (any text)
     max_results: how many articles to show
     region: country code, e.g. 'IN', 'US', 'GB'
     """
@@ -32,16 +32,16 @@ def fetch_news(query="Shankara", max_results=20, region="IN"):
 # ---------- Streamlit UI ----------
 
 st.set_page_config(
-    page_title="Shankara News Finder",
+    page_title="News Search",
     page_icon="📰",
     layout="wide",
 )
 
-st.title("📰 Shankara News Finder")
+st.title("📰 News Search")
 st.markdown(
     """
-Search the latest news about **Shankara** (or anything else) using Google News RSS.  
-No API keys, no paid services.
+Type **anything** (person, company, place, topic) and get the latest news  
+from Google News RSS. No API keys, no paid services.
 """
 )
 
@@ -51,7 +51,8 @@ with st.sidebar:
     query = st.text_input(
         "Search term",
         value="Shankara",
-        help="Example: 'Shankara', 'Adi Shankaracharya', 'Shankara building products'"
+        placeholder="e.g. Shankara, AI jobs, Qatar Airways, Tesla...",
+        help="You can search for any topic, company, person, place, etc."
     )
 
     max_results = st.number_input(
@@ -76,7 +77,11 @@ if search_button:
         st.warning("Please enter a search term.")
     else:
         with st.spinner("Fetching news..."):
-            articles = fetch_news(query=query.strip(), max_results=max_results, region=region.strip() or "IN")
+            articles = fetch_news(
+                query=query.strip(),
+                max_results=max_results,
+                region=region.strip() or "IN"
+            )
 
         if not articles:
             st.info("No news articles found.")
@@ -97,4 +102,3 @@ if search_button:
                 st.markdown("---")
 else:
     st.info("Set your search in the sidebar and click **Search News**.")
-
