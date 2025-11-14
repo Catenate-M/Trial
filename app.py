@@ -1,66 +1,66 @@
-import feedparser
-from urllib.parse import quote
 import streamlit as st
 import requests
 
 
 # ---------------------------------------------------------
-# Fetch news using Google News RSS
+# CONFIG — Your NewsAPI Key
 # ---------------------------------------------------------
-def fetch_news(query="Shankara", max_results=20, region="IN"):
+NEWS_API_KEY = "7b8d5e84d6974e7ca33d5c9d884ce31b"   # <-- YOUR KEY INSERTED
+
+
+# ---------------------------------------------------------
+# Fetch news using NewsAPI
+# ---------------------------------------------------------
+def fetch_news(query="Shankara", max_results=20, language="en"):
     """
-    Fetch news from Google News RSS for any query.
-    query: search term (any text)
-    max_results: number of articles to return
-    region: country code (IN, US, GB, etc.)
+    Fetch news from NewsAPI.org.
+    query: any search term
+    max_results: max articles to return (NewsAPI returns up to 100)
+    language: en, hi, fr, etc.
     """
 
     query = (query or "").strip()
-    region = (region or "").strip().upper() or "IN"
+    language = (language or "en").strip()
 
-    # Improve search for single-word queries
-    if len(query.split()) == 1:
-        search_term = f"{query} news"
-    else:
-        search_term = query
-
-    # Encode properly for Google News
-    q = quote(search_term)
-
-    # Google News RSS URL
-    url = f"https://news.google.com/rss/search?q={q}&hl=en-{region}&gl={region}&ceid={region}:en"
-
-    # Show what is being searched (useful for debugging)
-    st.caption(f"🔍 Search term used: **{search_term}**")
-    st.caption(f"🔗 RSS URL: `{url}`")
-
-    # --- Fetch and clean response manually to avoid XML token issues ---
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-    except Exception as e:
-        st.error(f"❌ Error fetching RSS: {e}")
+    if not query:
+        st.error("Please enter a search term.")
         return []
 
-    # Decode, ignoring invalid characters that break XML parsing
-    content = resp.content.decode("utf-8", errors="ignore")
+    url = "https://newsapi.org/v2/everything"
 
-    # Parse RSS feed
-    feed = feedparser.parse(content)
+    params = {
+        "q": query,
+        "sortBy": "publishedAt",
+        "language": language,
+        "pageSize": max_results,
+        "apiKey": NEWS_API_KEY,
+    }
 
-    # Only warn if parser is unhappy *and* there are no entries
-    if getattr(feed, "bozo", 0) and not getattr(feed, "entries", []):
-        st.warning(f"⚠️ RSS parsing warning: {getattr(feed, 'bozo_exception', 'Unknown error')}")
+    # Debug info
+    st.caption(f"🔍 Query: **{query}**")
+    st.caption(f"🌐 Language: **{language}**")
+    st.caption(f"🔗 API Endpoint: `{url}`")
 
-    articles = []
-    for entry in feed.entries[:max_results]:
-        articles.append({
-            "title": entry.get("title", ""),
-            "link": entry.get("link", ""),
-            "published": entry.get("published", ""),
-            "summary": entry.get("summary", "")
-        })
-    return articles
+    try:
+        r = requests.get(url, params=params, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+    except requests.exceptions.HTTPError as e:
+        st.error(f"❌ HTTP Error: {e}")
+        return []
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ Network Error: {e}")
+        return []
+    except Exception as e:
+        st.error(f"❌ Unknown Error: {e}")
+        return []
+
+    # API error handling
+    if data.get("status") != "ok":
+        st.error(f"❌ API Error: {data.get('message', 'Unknown error')}")
+        return []
+
+    return data.get("articles", [])
 
 
 # ---------------------------------------------------------
@@ -72,11 +72,11 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("📰 Universal News Search App")
+st.title("📰 Universal News Search App (Powered by NewsAPI)")
 st.markdown(
     """
 Search the latest news about **anything** — a person, company, topic, or event.  
-This uses free **Google News RSS**, so no API key is needed.
+This uses **NewsAPI**, which is fast, reliable, and fully JSON-based.
 """
 )
 
@@ -88,21 +88,22 @@ with st.sidebar:
         "Search term",
         value="Shankara",
         placeholder="e.g. Aakash, Tesla, AI Jobs, Cricket, Qatar Airways...",
-        help="You can search for ANY topic."
+        help="You can search ANY topic."
     )
 
-    max_results = st.number_input(
+    max_results = st.slider(
         "Max results",
         min_value=5,
-        max_value=50,
+        max_value=100,
         value=20,
-        step=1,
+        step=5,
     )
 
-    region = st.text_input(
-        "Region (country code)",
-        value="IN",
-        help="Examples: IN, US, GB, AU, CA"
+    language = st.selectbox(
+        "Language",
+        ["en", "hi", "fr", "de", "es", "it", "ru"],
+        index=0,
+        help="Choose the language of the news."
     )
 
     search_button = st.button("Search News")
@@ -117,28 +118,31 @@ if search_button:
             articles = fetch_news(
                 query=query.strip(),
                 max_results=max_results,
-                region=region.strip() or "IN"
+                language=language
             )
 
-        # Show results
         if not articles:
-            st.info("No news articles found. Try a more specific term (e.g. 'Aakash Institute').")
+            st.info("No news articles found. Try a more specific term.")
         else:
             st.success(f"Found {len(articles)} articles.")
+
             for i, a in enumerate(articles, start=1):
-                title = a["title"]
-                link = a["link"]
-                published = a["published"]
-                summary = a["summary"]
+                title = a.get("title", "No Title")
+                url = a.get("url")
+                published = a.get("publishedAt", "")
+                description = a.get("description", "")
+                source = a.get("source", {}).get("name", "Unknown Source")
 
                 st.markdown(f"### {i}. {title}")
-                if published:
-                    st.caption(f"🕒 {published}")
-                if summary:
-                    st.write(summary, unsafe_allow_html=True)
+                st.caption(f"📰 {source} | 🕒 {published}")
 
-                st.markdown(f"[🔗 Read full article]({link})")
+                if description:
+                    st.write(description)
+
+                if url:
+                    st.markdown(f"[🔗 Read full article]({url})")
+
                 st.markdown("---")
 
 else:
-    st.info("Enter a keyword and press **Search News** to get started.")
+    st.info("Enter a keyword and click **Search News** to begin.")
